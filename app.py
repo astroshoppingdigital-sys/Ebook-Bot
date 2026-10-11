@@ -1,33 +1,44 @@
 import os
-from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-
-load_dotenv()
+import requests
+from flask import Flask, request, jsonify, redirect
 
 app = Flask(__name__)
 
-PORT = int(os.getenv("PORT", 3000))
 CLIENT_ID = os.getenv("MELI_CLIENT_ID")
 CLIENT_SECRET = os.getenv("MELI_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("MELI_REDIRECT_URI")
+PORT = int(os.getenv("PORT", 3000))
 
-@app.route('/')
+@app.route("/", methods=["GET"])
 def home():
-    return 'EbookBot do Mercado Livre (Python) está rodando com sucesso!'
+    return "EbookBot do Mercado Livre (Python) está rodando com sucesso!"
 
-# Rota de callback do OAuth
-@app.route('/get', methods=['GET'])
-def oauth_callback():
-    code = request.args.get('code')
-    if code:
-        return f'Authorization Code recebido com sucesso: {code}'
-    return 'Endpoint de redirecionamento ativo.'
+@app.route("/auth", methods=["GET"])
+def auth():
+    auth_url = (
+        f"https://auth.mercadolivre.com.br/authorization?"
+        f"response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}"
+    )
+    return redirect(auth_url)
 
-# Webhook para escutar as vendas/mensagens
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    data = request.json
-    print('Notificação recebida do Mercado Livre:', data)
-    return 'Webhook recebido', 200
+@app.route("/callback", methods=["GET"])
+def callback():
+    code = request.args.get("code")
+    if not code:
+        return jsonify({"error": "Código não fornecido"}), 400
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=PORT)
+    url = "https://api.mercadolibre.com/oauth/token"
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": REDIRECT_URI
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    response = requests.post(url, data=payload, headers=headers)
+    return jsonify(response.json()), response.status_code
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=PORT)
